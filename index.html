@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Duo World — Puzzle Voyage</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: system-ui, sans-serif; background: #10131a; color: #e8ecf4; overflow: hidden; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  .hidden { display: none !important; }
+
+  /* ---------- menu / level select ---------- */
+  #menu { position: fixed; inset: 0; z-index: 10; background: linear-gradient(160deg, #16213a, #10131a 70%);
+          display: flex; flex-direction: column; align-items: center; padding: 26px 16px; overflow-y: auto; }
+  #menu h1 { font-size: 34px; letter-spacing: .5px; }
+  #menu h1 span { color: #ffd54f; }
+  #menu .sub { opacity: .85; margin: 6px 0 4px; text-align: center; }
+  #totalstars { color: #ffd54f; font-weight: 700; margin-bottom: 14px; }
+  .worldtitle { align-self: flex-start; max-width: 560px; width: 100%; margin: 14px auto 8px; font-size: 18px; font-weight: 700; }
+  #levels { max-width: 560px; width: 100%; margin: 0 auto; }
+  .lvlgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .lvl { background: #1d2740; border: 1px solid #33436b; border-radius: 12px; padding: 10px 4px; text-align: center; cursor: pointer; }
+  .lvl:hover { background: #27335a; }
+  .lvl .n { font-size: 20px; font-weight: 800; }
+  .lvl .nm { font-size: 10px; opacity: .85; line-height: 1.25; min-height: 26px; }
+  .lvl .st { color: #ffd54f; font-size: 12px; letter-spacing: 1px; }
+  .lvl.locked { opacity: .38; cursor: not-allowed; }
+  .howto { max-width: 560px; margin: 18px auto 0; font-size: 13px; line-height: 1.6; opacity: .85; }
+
+  /* ---------- in-game HUD ---------- */
+  #hud { position: fixed; top: 8px; left: 8px; right: 8px; z-index: 5; display: flex; gap: 8px; align-items: flex-start; pointer-events: none; }
+  .pill { background: rgba(10,13,20,.85); border: 1px solid #2b3448; border-radius: 10px; padding: 6px 10px; font-size: 13px; pointer-events: auto; }
+  #hint { position: fixed; top: 52px; left: 50%; transform: translateX(-50%); z-index: 5; max-width: min(680px, 92vw);
+          background: rgba(10,13,20,.78); border-radius: 10px; padding: 6px 12px; font-size: 13px; text-align: center; }
+  button { background: #2f6fed; color: #fff; border: 0; border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+  button.grey { background: #39445e; }
+  #activepill b.red { color: #ff8a80; } #activepill b.blue { color: #82b1ff; }
+
+  /* ---------- complete overlay ---------- */
+  #complete { position: fixed; inset: 0; z-index: 9; background: rgba(4,16,8,.55); display: flex; align-items: center; justify-content: center; }
+  #complete .card { background: #131a2c; border: 1px solid #2b3448; border-radius: 16px; padding: 26px 30px; text-align: center; }
+  #complete .stars { font-size: 40px; color: #ffd54f; letter-spacing: 6px; margin: 6px 0; }
+  #complete .row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+
+  /* ---------- touch controls ---------- */
+  #touch { position: fixed; bottom: 12px; left: 0; right: 0; z-index: 6; display: none; justify-content: space-between; padding: 0 14px; }
+  .pad { display: grid; grid-template-columns: 54px 54px 54px; grid-template-rows: 54px 54px; gap: 6px; }
+  .tbtn { background: rgba(47,111,237,.32); border: 1px solid #2f6fed; border-radius: 12px; color: #fff; font-size: 20px;
+          display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .tbtn:active { background: rgba(47,111,237,.7); }
+  .rbtns { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  #jumpbtn { width: 74px; height: 74px; border-radius: 50%; font-size: 14px; }
+  #switchbtn { width: 74px; height: 46px; font-size: 12px; background: rgba(255,179,0,.35); border-color: #ffb300; }
+  @media (pointer: coarse) { #touch.on { display: flex; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="menu">
+  <h1>🧩 Duo <span>World</span></h1>
+  <div class="sub">Two travellers. One puzzle. Finish every level <b>together</b>.<br>Offline solo: you control both — switch between them!</div>
+  <div id="totalstars">★ 0 / 30</div>
+  <div id="levels"></div>
+  <div class="howto"><b>How to play:</b> WASD / arrows to move, Space to jump, <b>Tab or Q to SWITCH</b> traveller.
+    One holds a switch — the other crosses. Crates count as weight. On ice, you slide.
+    Both travellers on the green pads at the same time finishes the level.</div>
+</div>
+
+<div id="hud" class="hidden">
+  <div class="pill"><button id="backbtn" class="grey">☰ Levels</button></div>
+  <div class="pill" id="lvlpill"><b id="lvlname">Level</b> · ⏱ <span id="timer">0.0</span>s</div>
+  <div class="pill" id="activepill">Controlling: <b class="red" id="activename">🔴 Red</b></div>
+  <div class="pill"><button id="restartbtn" class="grey">↺ Restart</button></div>
+</div>
+<div id="hint" class="hidden"></div>
+
+<div id="complete" class="hidden">
+  <div class="card">
+    <div style="font-size:24px; font-weight:800;">🎉 Level Complete!</div>
+    <div class="stars" id="compstars">★★★</div>
+    <div id="comptime" style="opacity:.9"></div>
+    <div class="row">
+      <button id="replaybtn" class="grey">↺ Replay</button>
+      <button id="menubtn" class="grey">☰ Levels</button>
+      <button id="nextbtn">Next ▶</button>
+    </div>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="pad">
+    <div></div><div class="tbtn" data-k="up">▲</div><div></div>
+    <div class="tbtn" data-k="left">◀</div><div class="tbtn" data-k="down">▼</div><div class="tbtn" data-k="right">▶</div>
+  </div>
+  <div class="rbtns">
+    <div class="tbtn" id="switchbtn">⇄ SWITCH</div>
+    <div class="tbtn" id="jumpbtn">JUMP</div>
+  </div>
+</div>
+
+<script src="game/engine.js"></script>
+<script src="game/levels.js"></script>
+<script type="importmap">{ "imports": { "three": "vendor/three/build/three.module.js" } }</script>
+<script type="module" src="client/main.js"></script>
+</body>
+</html>
